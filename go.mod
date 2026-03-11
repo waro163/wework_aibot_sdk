@@ -1,4 +1,4 @@
-module wework_aibot_sdk
+module github.com/waro163/wework_aibot_sdk
 
 go 1.23.12
 

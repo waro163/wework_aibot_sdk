@@ -20,7 +20,7 @@
 ## 安装
 
 ```bash
-go get wework_aibot_sdk
+go get github.com/waro163/wework_aibot_sdk
 ```
 
 ## 快速开始
@@ -36,7 +36,7 @@ import (
     "os"
     "os/signal"
 
-    sdk "wework_aibot_sdk"
+    sdk "github.com/waro163/wework_aibot_sdk"
 )
 
 func main() {
@@ -92,7 +92,7 @@ import (
     "fmt"
     "log"
 
-    sdk "wework_aibot_sdk"
+    sdk "github.com/waro163/wework_aibot_sdk"
 )
 
 func main() {

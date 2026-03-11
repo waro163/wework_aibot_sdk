@@ -20,7 +20,7 @@ A robust and production-ready Go SDK for WeWork (WeCom) AI Bot, providing WebSoc
 ## Installation
 
 ```bash
-go get wework_aibot_sdk
+go get github.com/waro163/wework_aibot_sdk
 ```
 
 ## Quick Start
@@ -36,7 +36,7 @@ import (
     "os"
     "os/signal"
 
-    sdk "wework_aibot_sdk"
+    sdk "github.com/waro163/wework_aibot_sdk"
 )
 
 func main() {
@@ -92,7 +92,7 @@ import (
     "fmt"
     "log"
 
-    sdk "wework_aibot_sdk"
+    sdk "github.com/waro163/wework_aibot_sdk"
 )
 
 func main() {

@@ -8,9 +8,8 @@ import (
 	"os/signal"
 	"strings"
 
-	sdk "wework_aibot_sdk"
-
 	"github.com/google/uuid"
+	sdk "github.com/waro163/wework_aibot_sdk"
 )
 
 func main() {
