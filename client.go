@@ -687,21 +687,3 @@ func (c *Client) Send(payload interface{}) error {
 		return fmt.Errorf("client stopped")
 	}
 }
-
-// Reconnect manually triggers a reconnection attempt
-func (c *Client) Reconnect() error {
-	// Trigger reconnection
-	select {
-	case c.reconnectTrigger <- struct{}{}:
-	default:
-	}
-
-	// Give it some time to reconnect
-	time.Sleep(100 * time.Millisecond)
-
-	if c.State() != Connected {
-		return fmt.Errorf("reconnection failed")
-	}
-
-	return nil
-}

@@ -377,24 +377,6 @@ func TestSend(t *testing.T) {
 	}
 }
 
-func TestReconnect(t *testing.T) {
-	cfg := &Config{
-		BotId:                     "test-bot",
-		Secret:                    "test-secret",
-		WsConnectionTimeout:       1,
-		WsConnectionMaxRetryTimes: 1,
-		AutoReconnect:             false, // Manual mode
-	}
-
-	client, _ := NewClient(cfg)
-
-	// Reconnect should trigger reconnection attempt
-	err := client.Reconnect()
-	if err == nil {
-		t.Error("Reconnect() should fail without server")
-	}
-}
-
 func TestCallbackSetters(t *testing.T) {
 	cfg := &Config{
 		BotId:  "test-bot",

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ref: https://github.com/WecomTeam/aibot-node-sdk/blob/main/src/crypto.ts
@@ -31,8 +32,8 @@ func DecryptFile(encryptedBuffer []byte, aesKey string) ([]byte, error) {
 		return nil, errors.New("decryptFile: aesKey must be a non-empty string")
 	}
 
-	// 将 Base64 编码的 aesKey 解码为字节数组
-	key, err := base64.StdEncoding.DecodeString(aesKey)
+	// 将 Base64 编码的 aesKey 解码为字节数组，目前消息中的aesKey大部分没有padding
+	key, err := base64.RawStdEncoding.DecodeString(strings.TrimRight(aesKey, "="))
 	if err != nil {
 		return nil, fmt.Errorf("decryptFile: failed to decode base64 aesKey - %w", err)
 	}
