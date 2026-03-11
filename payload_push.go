@@ -8,6 +8,8 @@ type PushPayload struct {
 
 type PushPayloadBody struct {
 	MsgType      string                   `json:"msgtype"`
+	ChatId       string                   `json:"chatid"`
+	ChatType     uint32                   `json:"chat_type"`
 	Markdown     *PayloadBodyMarkdown     `json:"markdown,omitempty"`
 	TemplateCard *PayloadBodyTemplateCard `json:"template_card,omitempty"`
 }

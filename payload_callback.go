@@ -11,7 +11,7 @@ type CallbackPayload struct {
 type CallbackPayloadBody struct {
 	MsgId       string           `json:"msgid"`
 	AibotId     string           `json:"aibotid"`
-	ChatId      string           `json:"chatid,omitempty"`
+	ChatId      string           `json:"chatid"`
 	ChatType    string           `json:"chattype"`
 	From        PayloadBodyFrom  `json:"from"`
 	MsgType     string           `json:"msgtype"`
