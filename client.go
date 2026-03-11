@@ -111,6 +111,14 @@ func NewClient(cfg *Config) (*Client, error) {
 		cfg.WsConnectionRetryInterval = 2
 	}
 
+	if cfg.SendQueueSize == 0 {
+		cfg.SendQueueSize = 100
+	}
+
+	if cfg.MsgChanSize == 0 {
+		cfg.MsgChanSize = 100
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	workerCtx, workerCancel := context.WithCancel(ctx)
 
@@ -121,8 +129,8 @@ func NewClient(cfg *Config) (*Client, error) {
 		cancel:           cancel,
 		workerCtx:        workerCtx,
 		workerCancel:     workerCancel,
-		sendQueue:        make(chan []byte, 100),
-		msgChan:          make(chan CallbackPayload, 100),
+		sendQueue:        make(chan []byte, cfg.SendQueueSize),
+		msgChan:          make(chan CallbackPayload, cfg.MsgChanSize),
 		authAckChan:      make(chan error, 1),
 		reconnectTrigger: make(chan struct{}, 1),
 	}, nil

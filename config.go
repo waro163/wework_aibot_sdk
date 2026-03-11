@@ -10,4 +10,6 @@ type Config struct {
 	WsHandshakeTimeout        int    `json:"handshake_timeout"`         // seconds
 	HeartbeatInterval         int    `json:"heartbeat_interval"`        // seconds, default 30
 	AutoReconnect             bool   `json:"auto_reconnect"`            // enable auto-reconnect mode
+	SendQueueSize             int    `json:"send_queue_size"`           // send queue buffer size, default 100
+	MsgChanSize               int    `json:"msg_chan_size"`             // message channel buffer size, default 100
 }
