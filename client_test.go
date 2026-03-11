@@ -183,12 +183,12 @@ func TestHandleSpecialMessage(t *testing.T) {
 				Headers: PayloadHeaders{
 					ReqId: "aibot_subscribe:123-456",
 				},
-				Body: CallbackPayloadBody{
-					PayloadError: PayloadError{
-						ErrCode: func() *int { i := 0; return &i }(),
-					},
+				Body: CallbackPayloadBody{},
+				PayloadError: PayloadError{
+					ErrCode: func() *int { i := 0; return &i }(),
 				},
 			},
+
 			isSpecial: true,
 		},
 		{

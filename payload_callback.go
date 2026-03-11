@@ -4,6 +4,8 @@ type CallbackPayload struct {
 	Cmd     string              `json:"cmd"`
 	Headers PayloadHeaders      `json:"headers"`
 	Body    CallbackPayloadBody `json:"body"`
+	// response
+	PayloadError
 }
 
 type CallbackPayloadBody struct {
@@ -23,8 +25,6 @@ type CallbackPayloadBody struct {
 	// event message
 	CreateTime int64            `json:"create_time,omitempty"`
 	Event      PayloadBodyEvent `json:"event,omitempty"`
-	// response
-	PayloadError
 }
 
 type PayloadBodyFrom struct {
@@ -72,6 +72,6 @@ type PayloadBodyQuote struct {
 
 type PayloadBodyEvent struct {
 	EventType string `json:"eventtype"`
-	EventKey  string `json:"event_key,omitempty"`  // 模板卡片事件：用户点击的按钮 key
-	TaskId    string `json:"task_id,omitempty"`    // 模板卡片事件：任务 ID
+	EventKey  string `json:"event_key,omitempty"` // 模板卡片事件：用户点击的按钮 key
+	TaskId    string `json:"task_id,omitempty"`   // 模板卡片事件：任务 ID
 }

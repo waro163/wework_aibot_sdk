@@ -49,7 +49,7 @@ var (
 	ErrAlreadyStarted     = errors.New("client already started")
 	ErrAuthFailed         = errors.New("authentication failed")
 	ErrAuthTimeout        = errors.New("authentication timeout")
-	ErrUnrecoverable      = errors.New("unrecoverable error") // 不可恢复的错误
+	ErrUnrecoverable      = errors.New("unrecoverable error")
 )
 
 // Client is a WebSocket client with auto-reconnection and dual message delivery
@@ -245,13 +245,12 @@ func (c *Client) authenticate() error {
 // Returns true if message was handled (should not dispatch to user)
 func (c *Client) handleSpecialMessage(payload CallbackPayload) bool {
 	reqId := payload.Headers.ReqId
-
 	// Handle auth response
 	if strings.HasPrefix(reqId, string(CMD_AIBOT_SUBSCRIBE)) {
-		if payload.Body.ErrCode != nil && *payload.Body.ErrCode == ERROR_CODE_SUCCESS {
+		if payload.ErrCode != nil && *payload.ErrCode == ERROR_CODE_SUCCESS {
 			c.authAckChan <- nil
 		} else {
-			errMsg := payload.Body.ErrMsg
+			errMsg := payload.ErrMsg
 			if errMsg == "" {
 				errMsg = "authentication failed"
 			}
@@ -506,8 +505,8 @@ func (c *Client) reconnectionLoop() {
 			c.setState(Reconnecting)
 
 			// Stop worker goroutines gracefully
-			c.workerCancel()       // Cancel worker context
-			c.workerWg.Wait()      // Wait for all workers to exit
+			c.workerCancel()  // Cancel worker context
+			c.workerWg.Wait() // Wait for all workers to exit
 
 			// Close old connection
 			c.connMu.Lock()
@@ -615,7 +614,7 @@ func (c *Client) Start() error {
 	// Authenticate
 	if err := c.authenticate(); err != nil {
 		// Authentication failed - clean up
-		c.workerCancel()  // Cancel worker context
+		c.workerCancel() // Cancel worker context
 
 		c.connMu.Lock()
 		if c.conn != nil {
@@ -657,16 +656,17 @@ func (c *Client) Stop() error {
 	// Cancel main context to signal all goroutines to exit
 	c.cancel()
 
-	// Wait for all goroutines to exit
-	c.wg.Wait()
-
-	// Close WebSocket connection
+	// Close WebSocket connection BEFORE waiting for goroutines
+	// This unblocks any pending ReadMessage() calls in readLoop
 	c.connMu.Lock()
 	if c.conn != nil {
 		c.conn.Close()
 		c.conn = nil
 	}
 	c.connMu.Unlock()
+
+	// Wait for all goroutines to exit
+	c.wg.Wait()
 
 	c.setState(Disconnected)
 	return nil
