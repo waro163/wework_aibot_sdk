@@ -66,6 +66,11 @@ type Client struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
+	// Worker goroutines lifecycle management
+	workerCtx    context.Context
+	workerCancel context.CancelFunc
+	workerWg     sync.WaitGroup
+
 	// Channels
 	sendQueue        chan []byte
 	msgChan          chan CallbackPayload
@@ -106,12 +111,15 @@ func NewClient(cfg *Config) (*Client, error) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	workerCtx, workerCancel := context.WithCancel(ctx)
 
 	return &Client{
 		cfg:              cfg,
 		state:            Disconnected,
 		ctx:              ctx,
 		cancel:           cancel,
+		workerCtx:        workerCtx,
+		workerCancel:     workerCancel,
 		sendQueue:        make(chan []byte, 100),
 		msgChan:          make(chan CallbackPayload, 100),
 		authAckChan:      make(chan error, 1),
@@ -304,10 +312,11 @@ func (c *Client) SetReconnectHandler(handler func()) {
 // readLoop reads messages from WebSocket connection
 func (c *Client) readLoop() {
 	defer c.wg.Done()
+	defer c.workerWg.Done()
 
 	for {
 		select {
-		case <-c.ctx.Done():
+		case <-c.workerCtx.Done():
 			return
 		default:
 		}
@@ -360,11 +369,15 @@ func (c *Client) handleConnectionError(err error) {
 // writeLoop writes messages from sendQueue to WebSocket
 func (c *Client) writeLoop() {
 	defer c.wg.Done()
+	defer c.workerWg.Done()
 
 	for {
 		select {
+		case <-c.workerCtx.Done():
+			// Worker context cancelled - exit immediately
+			return
 		case <-c.ctx.Done():
-			// Drain queue before exit
+			// Client context cancelled - drain queue before exit
 			c.drainSendQueue()
 			return
 		case msg := <-c.sendQueue:
@@ -373,7 +386,8 @@ func (c *Client) writeLoop() {
 			c.connMu.RUnlock()
 
 			if conn == nil {
-				continue
+				// Connection closed - exit this worker
+				return
 			}
 
 			if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
@@ -430,6 +444,7 @@ func (c *Client) sendPing() error {
 // heartbeatLoop sends periodic ping messages
 func (c *Client) heartbeatLoop() {
 	defer c.wg.Done()
+	defer c.workerWg.Done()
 
 	interval := time.Duration(c.cfg.HeartbeatInterval) * time.Second
 	ticker := time.NewTicker(interval)
@@ -437,11 +452,17 @@ func (c *Client) heartbeatLoop() {
 
 	for {
 		select {
+		case <-c.workerCtx.Done():
+			return
 		case <-c.ctx.Done():
 			return
 		case <-ticker.C:
 			if err := c.sendPing(); err != nil {
-				// Ping failure is not critical, connection error will be caught by reader
+				// If ErrNotConnected, this worker should exit
+				if errors.Is(err, ErrNotConnected) {
+					return
+				}
+				// Other ping failures are not critical, connection error will be caught by reader
 				continue
 			}
 		}
@@ -459,6 +480,10 @@ func (c *Client) reconnectionLoop() {
 		case <-c.reconnectTrigger:
 			c.setState(Reconnecting)
 
+			// Stop worker goroutines gracefully
+			c.workerCancel()       // Cancel worker context
+			c.workerWg.Wait()      // Wait for all workers to exit
+
 			// Close old connection
 			c.connMu.Lock()
 			if c.conn != nil {
@@ -466,10 +491,6 @@ func (c *Client) reconnectionLoop() {
 				c.conn = nil
 			}
 			c.connMu.Unlock()
-
-			// Stop existing goroutines (they will exit when conn is nil)
-			// Wait briefly for them to exit
-			time.Sleep(100 * time.Millisecond)
 
 			// Attempt reconnection
 			if err := c.connect(); err != nil {
@@ -513,8 +534,12 @@ func (c *Client) reconnectionLoop() {
 			// Reconnection successful
 			c.setState(Connected)
 
+			// Create new worker context for new goroutines
+			c.workerCtx, c.workerCancel = context.WithCancel(c.ctx)
+
 			// Restart reader, writer, and heartbeat goroutines
 			c.wg.Add(3)
+			c.workerWg.Add(3)
 			go c.readLoop()
 			go c.writeLoop()
 			go c.heartbeatLoop()
@@ -547,22 +572,29 @@ func (c *Client) Start() error {
 
 	// Start reader goroutine to receive auth response
 	c.wg.Add(1)
+	c.workerWg.Add(1)
 	go c.readLoop()
 
 	// Authenticate
 	if err := c.authenticate(); err != nil {
 		// Authentication failed - clean up
+		c.workerCancel()  // Cancel worker context
+
 		c.connMu.Lock()
 		if c.conn != nil {
 			c.conn.Close()
 			c.conn = nil
 		}
 		c.connMu.Unlock()
+
+		// Wait for reader to exit (it will exit when conn is closed or workerCtx is done)
+		c.workerWg.Wait()
 		return err
 	}
 
 	// Authentication successful - start other goroutines
 	c.wg.Add(2)
+	c.workerWg.Add(2)
 	go c.writeLoop()
 	go c.heartbeatLoop()
 
@@ -582,7 +614,10 @@ func (c *Client) Stop() error {
 		return nil
 	}
 
-	// Cancel context to signal all goroutines to exit
+	// Cancel worker context first to stop worker goroutines
+	c.workerCancel()
+
+	// Cancel main context to signal all goroutines to exit
 	c.cancel()
 
 	// Wait for all goroutines to exit
