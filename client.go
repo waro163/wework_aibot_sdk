@@ -78,10 +78,11 @@ type Client struct {
 	reconnectTrigger chan struct{}
 
 	// Callbacks (protected by callbackMu)
-	callbackMu  sync.RWMutex
-	onMessage   func(CallbackPayload) error
-	onError     func(error)
-	onReconnect func()
+	callbackMu   sync.RWMutex
+	onRawMessage func([]byte) error
+	onMessage    func(CallbackPayload) error
+	onError      func(error)
+	onReconnect  func()
 }
 
 // NewClient creates a new WebSocket client
@@ -277,18 +278,29 @@ func (c *Client) handleSpecialMessage(payload CallbackPayload) bool {
 }
 
 // dispatchMessage sends message to callback and/or channel
-func (c *Client) dispatchMessage(payload CallbackPayload) {
+func (c *Client) dispatchMessage(message []byte) {
 	// Get callbacks with lock
 	c.callbackMu.RLock()
+	onRawMessage := c.onRawMessage
 	onMessage := c.onMessage
 	onError := c.onError
 	c.callbackMu.RUnlock()
 
-	// Callback mode
-	if onMessage != nil {
-		if err := onMessage(payload); err != nil && onError != nil {
-			onError(fmt.Errorf("message handler error: %w", err))
+	if onRawMessage != nil {
+		onRawMessage(message)
+	}
+
+	var payload CallbackPayload
+	if err := json.Unmarshal(message, &payload); err != nil {
+		if onError != nil {
+			onError(fmt.Errorf("json Unmarshal raw message error: %w", err))
 		}
+		return
+	}
+
+	// Handle special messages (auth, disconnect, ping)
+	if c.handleSpecialMessage(payload) {
+		return
 	}
 
 	// Channel mode (non-blocking send)
@@ -297,8 +309,15 @@ func (c *Client) dispatchMessage(payload CallbackPayload) {
 		case c.msgChan <- payload:
 		default:
 			// Channel full, message dropped
-			// Could log warning here
+			if onError != nil {
+				onError(fmt.Errorf("message channel full"))
+			}
 		}
+	}
+
+	// Callback mode
+	if onMessage != nil {
+		onMessage(payload)
 	}
 }
 
@@ -306,6 +325,12 @@ func (c *Client) dispatchMessage(payload CallbackPayload) {
 // Returns nil if client is not initialized
 func (c *Client) Messages() <-chan CallbackPayload {
 	return c.msgChan
+}
+
+func (c *Client) SetRawMessageHandler(handler func([]byte) error) {
+	c.callbackMu.Lock()
+	c.onRawMessage = handler
+	c.callbackMu.Unlock()
 }
 
 // SetMessageHandler sets the callback for incoming messages
@@ -355,19 +380,7 @@ func (c *Client) readLoop() {
 			return
 		}
 
-		var payload CallbackPayload
-		if err := json.Unmarshal(message, &payload); err != nil {
-			// Skip malformed messages
-			continue
-		}
-
-		// Handle special messages (auth, disconnect, ping)
-		if c.handleSpecialMessage(payload) {
-			continue
-		}
-
-		// Dispatch to user
-		c.dispatchMessage(payload)
+		c.dispatchMessage(message)
 	}
 }
 

@@ -1,6 +1,7 @@
 package weworkaibotsdk
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -249,6 +250,25 @@ func TestDispatchMessage(t *testing.T) {
 			MsgId: "test-msg-123",
 		},
 	}
+	payloadJSON, _ := json.Marshal(payload)
+
+	// Test raw message handler
+	t.Run("raw message handler", func(t *testing.T) {
+		rawCalled := false
+		client.SetRawMessageHandler(func(data []byte) error {
+			rawCalled = true
+			if string(data) != string(payloadJSON) {
+				t.Error("raw message data mismatch")
+			}
+			return nil
+		})
+
+		client.dispatchMessage(payloadJSON)
+
+		if !rawCalled {
+			t.Error("raw message handler was not called")
+		}
+	})
 
 	// Test callback mode
 	t.Run("callback mode", func(t *testing.T) {
@@ -261,7 +281,7 @@ func TestDispatchMessage(t *testing.T) {
 			return nil
 		})
 
-		client.dispatchMessage(payload)
+		client.dispatchMessage(payloadJSON)
 
 		if !called {
 			t.Error("message handler was not called")
@@ -272,7 +292,7 @@ func TestDispatchMessage(t *testing.T) {
 	t.Run("channel mode", func(t *testing.T) {
 		client.onMessage = nil // Clear callback
 
-		client.dispatchMessage(payload)
+		client.dispatchMessage(payloadJSON)
 
 		select {
 		case msg := <-client.Messages():
@@ -385,6 +405,13 @@ func TestCallbackSetters(t *testing.T) {
 
 	client, _ := NewClient(cfg)
 
+	// Test SetRawMessageHandler
+	rawHandlerCalled := false
+	client.SetRawMessageHandler(func(data []byte) error {
+		rawHandlerCalled = true
+		return nil
+	})
+
 	// Test SetMessageHandler
 	msgHandlerCalled := false
 	client.SetMessageHandler(func(p CallbackPayload) error {
@@ -416,8 +443,20 @@ func TestCallbackSetters(t *testing.T) {
 		t.Error("SetReconnectHandler did not set callback")
 	}
 
-	// Trigger callbacks to verify they work
-	client.onMessage(CallbackPayload{})
+	// Trigger callbacks to verify they work via dispatchMessage
+	testPayload := CallbackPayload{
+		Cmd: CMD_AIBOT_MSG_CALLBACK,
+		Body: CallbackPayloadBody{
+			MsgId: "test",
+		},
+	}
+	testPayloadJSON, _ := json.Marshal(testPayload)
+
+	client.dispatchMessage(testPayloadJSON)
+
+	if !rawHandlerCalled {
+		t.Error("raw message handler not called")
+	}
 	if !msgHandlerCalled {
 		t.Error("message handler not called")
 	}
