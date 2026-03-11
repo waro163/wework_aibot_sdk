@@ -77,7 +77,8 @@ type Client struct {
 	authAckChan      chan error
 	reconnectTrigger chan struct{}
 
-	// Callbacks
+	// Callbacks (protected by callbackMu)
+	callbackMu  sync.RWMutex
 	onMessage   func(CallbackPayload) error
 	onError     func(error)
 	onReconnect func()
@@ -270,10 +271,16 @@ func (c *Client) handleSpecialMessage(payload CallbackPayload) bool {
 
 // dispatchMessage sends message to callback and/or channel
 func (c *Client) dispatchMessage(payload CallbackPayload) {
+	// Get callbacks with lock
+	c.callbackMu.RLock()
+	onMessage := c.onMessage
+	onError := c.onError
+	c.callbackMu.RUnlock()
+
 	// Callback mode
-	if c.onMessage != nil {
-		if err := c.onMessage(payload); err != nil && c.onError != nil {
-			c.onError(fmt.Errorf("message handler error: %w", err))
+	if onMessage != nil {
+		if err := onMessage(payload); err != nil && onError != nil {
+			onError(fmt.Errorf("message handler error: %w", err))
 		}
 	}
 
@@ -296,17 +303,23 @@ func (c *Client) Messages() <-chan CallbackPayload {
 
 // SetMessageHandler sets the callback for incoming messages
 func (c *Client) SetMessageHandler(handler func(CallbackPayload) error) {
+	c.callbackMu.Lock()
 	c.onMessage = handler
+	c.callbackMu.Unlock()
 }
 
 // SetErrorHandler sets the callback for connection/runtime errors
 func (c *Client) SetErrorHandler(handler func(error)) {
+	c.callbackMu.Lock()
 	c.onError = handler
+	c.callbackMu.Unlock()
 }
 
 // SetReconnectHandler sets the callback for successful reconnections
 func (c *Client) SetReconnectHandler(handler func()) {
+	c.callbackMu.Lock()
 	c.onReconnect = handler
+	c.callbackMu.Unlock()
 }
 
 // readLoop reads messages from WebSocket connection
@@ -360,8 +373,12 @@ func (c *Client) handleConnectionError(err error) {
 		default:
 		}
 	} else {
-		if c.onError != nil {
-			c.onError(fmt.Errorf("connection error: %w", err))
+		c.callbackMu.RLock()
+		onError := c.onError
+		c.callbackMu.RUnlock()
+
+		if onError != nil {
+			onError(fmt.Errorf("connection error: %w", err))
 		}
 	}
 }
@@ -494,8 +511,12 @@ func (c *Client) reconnectionLoop() {
 
 			// Attempt reconnection
 			if err := c.connect(); err != nil {
-				if c.onError != nil {
-					c.onError(fmt.Errorf("reconnect failed: %w", err))
+				c.callbackMu.RLock()
+				onError := c.onError
+				c.callbackMu.RUnlock()
+
+				if onError != nil {
+					onError(fmt.Errorf("reconnect failed: %w", err))
 				}
 
 				// Check if this is an unrecoverable error
@@ -510,8 +531,12 @@ func (c *Client) reconnectionLoop() {
 
 			// Re-authenticate
 			if err := c.authenticate(); err != nil {
-				if c.onError != nil {
-					c.onError(fmt.Errorf("re-authentication failed: %w", err))
+				c.callbackMu.RLock()
+				onError := c.onError
+				c.callbackMu.RUnlock()
+
+				if onError != nil {
+					onError(fmt.Errorf("re-authentication failed: %w", err))
 				}
 
 				// Check if this is an unrecoverable error
@@ -545,8 +570,12 @@ func (c *Client) reconnectionLoop() {
 			go c.heartbeatLoop()
 
 			// Notify application
-			if c.onReconnect != nil {
-				c.onReconnect()
+			c.callbackMu.RLock()
+			onReconnect := c.onReconnect
+			c.callbackMu.RUnlock()
+
+			if onReconnect != nil {
+				onReconnect()
 			}
 		}
 	}
