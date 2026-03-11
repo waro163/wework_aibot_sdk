@@ -7,7 +7,9 @@ type PushPayload struct {
 }
 
 type PushPayloadBody struct {
-	Markdown PayloadBodyMarkdown `json:"markdown"`
+	MsgType      string                   `json:"msgtype"`
+	Markdown     *PayloadBodyMarkdown     `json:"markdown,omitempty"`
+	TemplateCard *PayloadBodyTemplateCard `json:"template_card,omitempty"`
 }
 
 type PayloadBodyMarkdown struct {
